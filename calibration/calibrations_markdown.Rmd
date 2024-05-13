@@ -1,0 +1,462 @@
+---
+title: "R Notebook"
+output: html_notebook
+fig_width: 10
+fig_height: 10
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code.
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*.
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(ggtext)
+library(viridis)
+library(ggplot2)
+library(showtext)
+library(ggpubr)
+
+theme_david = function() {
+  showtext_auto()
+  font_add('Cambria', 'C:/Windows/Fonts/Cambria.ttc')
+  theme_bw() %+replace%
+  theme(
+    axis.title = element_text(family='Cambria', color='black', size=22),
+    axis.ticks = element_line(color='black'),
+    axis.line = element_line(color='black'),
+    title = element_text(family='Cambria', color='black', size=28),
+    axis.text = element_text(family='Cambria', color='black', size=20),
+    legend.text = element_text(family='Cambria', color='black', size=14),
+    strip.text = element_text(family='Cambria', color='darkgreen', size=14)
+  )
+}
+theme_set(theme_david())
+```
+
+```{r}
+FILE_PATH = 'C:/Users/David/OneDrive - University of North Carolina at Chapel Hill/honors thesis/ctdTURBO_data/tests/'
+
+O2_SENSOR_DATA = 'o2 double bath test.csv'
+
+SALT_SENSOR_DATA = 'salinity test.csv'
+
+# salt_additions = c(0, 2.10922, 2.13980, 2.16521, 2.23335, 2.33947)
+# timestamps = c('04:22', '08:38', 
+#               '17:50', '20:20', 
+#               '25:10', '27:40', 
+#               '33:30', '36:00', 
+#               '40:39', '43:10', 
+#               '48:10', '50:40')
+SALT_ADDITIONS = 'salinity_test_additions.csv'
+
+
+
+TURBIDITY_SENSOR_DATA_1 = 'turbidity_test_4_p1.csv'
+TURBIDITY_SENSOR_DATA_2 = 'turbidity_test_4_p2.csv'
+TURBIDITY_ADDITIONS = 'turbidity_test_additions_4.csv'
+slurry_sediment_mass = 0.24077 #grams
+slurry_container_volume = 0.750 #liters
+turbidity_test_volume = 96.4 #water volume in test bucket
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+```{r}
+setwd(FILE_PATH)
+source('cal_utils.R')
+stf = reformat(read.csv(paste(FILE_PATH, SALT_SENSOR_DATA, sep=''), skip=1))
+
+elap = stf[,'dateTime'] - stf[1,'dateTime']
+
+salt_additions = read.csv(paste(FILE_PATH, SALT_ADDITIONS, sep=''))[,1]
+timestamps_mat = read.csv(paste(FILE_PATH, SALT_ADDITIONS, sep=''))[,2:3]
+timestamps = rep(0, 2*length(salt_additions))
+c=1
+for (r in 1:(2*length(salt_additions))) {
+  timestamps[r] = timestamps_mat[(r + 1)/2,c]
+  if (c == 1) {
+    c = 2
+  } else {
+    c = 1
+  }
+}
+ts = rep(0, length(timestamps))
+
+for (s in 1:length(timestamps)) {
+  min = 60 * as.numeric(str_split_1(timestamps[s], ':')[1])
+  sec = as.numeric(str_split_1(timestamps[s], ':')[2])
+  ts[s] = min + sec
+}
+
+
+mean_measured_salinities = rep(0, 6)
+
+for (i in c(1, 3, 5, 7, 9, 11)) {
+  o = i + 1
+  mean_measured_salinities[o/2] = (mean(stf[elap >= ts[i] & elap <= ts[o], 4])) * 0.55 / 1000
+}
+
+
+# salt_additions = c(0, 2.10922, 2.13980, 2.16521, 2.23335, 2.33947)
+
+calculated_salinities = rep(0,6)
+for (n in 1:6) {
+  calculated_salinities[n] = 1000 * sum(salt_additions[1:n]) / (300 + sum(salt_additions[1:n]))
+}
+
+# plot.new()
+# plot(calculated_salinities, mean_measured_salinities)
+# abline(ls, lty=2)
+sal_data_plt = data.frame(calculated_salinities, mean_measured_salinities)
+
+salinity_calibration_curve = ggplot(data=sal_data_plt, mapping=aes(x=calculated_salinities, y=mean_measured_salinities)) +
+  geom_point(size=2.5) +
+  geom_smooth(method='lm', se=FALSE, color='black', linetype=2, linewidth=1) +
+  # scale_y_continuous(minor_breaks=seq(from=0, to=40, by=5)) +
+  # scale_x_continuous(minor_breaks=seq(from=0, to=40, by=5)) +
+  ggtitle(label='Measured vs. Calculated Salinity') +
+  ylab(label='Measured Salinities (ppt)') +
+  xlab(label='Calculated Salinities (ppt)') +
+  coord_fixed(ratio=1) +
+  geom_label(
+    # data=regression_label,
+    mapping=aes(
+      x=27,
+      y=15,
+      label=regression_label(mean_measured_salinities, calculated_salinities, 3)
+    ),
+    parse=TRUE,
+    family='Cambria',
+    size=8
+  )
+  # theme_bw() +
+  # theme(
+  #   axis.line.y.right = element_line(color='black'),
+  #   # axis.title.y.right = element_text(color=sec_axis_color),
+  #   # axis.ticks.y.right = element_line(color=sec_axis_color),
+  #   # axis.text.y.right = element_text(color=sec_axis_color),
+  #   axis.line.y.left = element_line(color='black'),
+  #   axis.title.y.left = element_text(color='black'),
+  #   axis.ticks.y.left = element_line(color='black'),
+  #   axis.text.y.left = element_text(color='black'),
+  #   axis.line.x.bottom = element_line(color='black'),
+  #   axis.title.x.bottom = element_text(color='black'),
+  #   axis.ticks.x.bottom = element_line(color='black'),
+  #   axis.text.x.bottom = element_text(color='black')
+  # )
+```
+
+```{r}
+# YYYY-MM-DD hh:mm:ss
+start = '2024-02-09 13:00:00'
+end = '2024-02-09 18:00:00'
+```
+
+```{r}
+# setwd(FILE_PATH)
+# source('cal_utils.R')
+otf = reformat(read.csv(paste(FILE_PATH, O2_SENSOR_DATA, sep=''), skip=1))
+otf = otf[otf[,'dateTime']>1707501600 & otf[,'dateTime']<1707520750,]
+
+DO_conv = (otf[,'DO'] * 1000000) / (1000 * 2 * 15.999)
+
+# (mg/L) * (1 g/1000 mg) = g/L
+# (g/L) * 1 g/31.998 mol = mol/L
+# mol/L * 1000000 umol/mol = umol/L
+# umol/L * 1L/kg = umol/kg
+  
+time_series_o2 = data.frame(
+  time=otf[,'dateTime'] - otf[,'dateTime'][1],
+  measured_temperature=otf[,'Temp'],
+  measured_o2=DO_conv,
+  calculated_o2=modeled_do_sat(otf[,'Temp'], 0)
+)
+
+o2_instrument_response = data.frame(
+  temperature_axis=seq(from=0.00, to=25.00, by=0.01),
+  calculated_o2=modeled_do_sat(seq(from=0.00, to=25.00, by=0.01), 0)
+)
+
+  # scale = (max(dat$FIRST_Z) - min(dat$FIRST_Z)) / (max(dat$slope_deg) - min(dat$slope_deg))
+
+# scale = (max(time_series_o2$calculated_o2) - min(time_series_o2$measured_o2)) / (max(time_series_o2$measured_temperature) - min(time_series_o2$measured_temperature))
+
+scale=20
+  # shift = scale * (-min(dat$slope_deg)) + min(dat$FIRST_Z)
+# shift = scale * (-min(time_series_o2$measured_temperature)) + min(time_series_o2$calculated_o2)
+
+shift=0
+
+# dev.new()
+# par(mfrow=c(1,2))
+
+title = 'Measured and Calculated Dissolved Oxygen Concentration Time Series'
+xlabel = 'Time (s)'
+ylabel = expression(Dissolved~O[2]~(mu*mol~kg^-1))
+y2label = 'Temperature (C)'
+
+temperature_color = 'red'
+calc_o2_color = '#4171c4'
+measured_o2_color = 'black'
+sec_axis_color = 'black'
+
+do_cal_timeseries_plot = ggplot() + 
+  geom_line(data=time_series_o2, mapping=aes(x=time, y=measured_o2, color='m'), linewidth=1.5) +
+  geom_line(data=time_series_o2, mapping=aes(x=time, y=calculated_o2, color='c'), linewidth=1.5) + 
+  geom_line(data=time_series_o2, mapping=aes(x=time, y=scale_function(measured_temperature, scale, shift), color='t'), linewidth=1.5) +
+  ggtitle(label=title) +
+  ylab(label=ylabel) +
+  xlab(label=xlabel) +
+  scale_y_continuous(
+    limits=c(0, 450),
+    sec.axis=sec_axis(
+      trans=~inv_scale_function(., scale, shift),
+      name=y2label
+    )
+  ) + 
+  # coord_fixed(ratio=20000/450) +
+  # theme_bw() + theme (
+  #   axis.line.y.right = element_line(color=sec_axis_color),
+  #   axis.title.y.right = element_text(color=sec_axis_color),
+  #   axis.ticks.y.right = element_line(color=sec_axis_color),
+  #   axis.text.y.right = element_text(color=sec_axis_color),
+  #   axis.line.y.left = element_line(color='black'),
+  #   axis.title.y.left = element_text(color='black'),
+  #   axis.ticks.y.left = element_line(color='black'),
+  #   axis.text.y.left = element_text(color='black'),
+  #   axis.line.x.bottom = element_line(color='black'),
+  #   axis.title.x.bottom = element_text(color='black'),
+  #   axis.ticks.x.bottom = element_line(color='black'),
+  #   axis.text.x.bottom = element_text(color='black'),
+  theme(
+    legend.text.align = 0,
+    legend.position = c(0.7, 0.15),
+    plot.title = element_textbox_simple()
+  ) +
+  scale_color_manual(
+    name = NULL,
+    values = c(
+      m = measured_o2_color,
+      c = calc_o2_color,
+      t = temperature_color
+    ),
+    labels = c(
+      m = expression(Measured~O[2]~Concentration~(mu*mol~kg^-1)),
+      c = expression(Calculated~O[2]~Concentration~(mu*mol~kg^-1)),
+      t = expression(Temperature~(C))
+    ),
+    limits = c('m', 'c', 't')
+  )
+  
+
+
+```
+
+```{r}
+title = 'Measured vs. Calculated Dissolved Oxygen Concentration'
+xlabel = expression(Calculated ~ O[2] ~ Concentration ~ (mu*mol~kg^-1))
+ylabel = expression(Measured ~ O[2] ~ Concentration ~ (mu*mol~kg^-1))
+
+
+ggplot() + 
+  geom_point(data=time_series_o2, mapping=aes(x=calculated_o2, y=measured_o2, color=time), shape=20, size=0.9) + 
+  scale_x_continuous(
+    minor_breaks=seq(from=0, to=500, by=20),
+    name=xlabel
+  ) +
+  scale_y_continuous(
+    minor_breaks=seq(from=0, to=400, by=20),
+    name=ylabel
+  ) +
+  ggtitle(
+    label=title
+  ) + 
+  coord_fixed(ratio=1) + 
+  # theme_bw() + 
+  # theme(
+  #   axis.line.y.right = element_line(color='black'),
+  #   # axis.title.y.right = element_text(color=sec_axis_color),
+  #   # axis.ticks.y.right = element_line(color=sec_axis_color),
+  #   # axis.text.y.right = element_text(color=sec_axis_color),
+  #   axis.line.y.left = element_line(color='black'),
+  #   axis.title.y.left = element_text(color='black'),
+  #   axis.ticks.y.left = element_line(color='black'),
+  #   axis.text.y.left = element_text(color='black'),
+  #   axis.line.x.bottom = element_line(color='black'),
+  #   axis.title.x.bottom = element_text(color='black'),
+  #   axis.ticks.x.bottom = element_line(color='black'),
+  #   axis.text.x.bottom = element_text(color='black')
+  # ) +
+  scale_color_viridis(
+    direction=-1,
+    name='Time (s)'
+  )
+
+
+# 
+# plot(temp_axis, modeled_do_sat(temp_axis, 0), xlab='Temperature (C)', ylab='DO saturation (per mille)', type='l', ylim=c(0, 480))
+# lines(otf[,'Temp'], otf[,'DO_co
+```
+
+```{r}
+title = 'Measured vs. Calculated Dissolved Oxygen Temperature Response'
+xlabel = 'Temperature (C)'
+ylabel = expression(Dissolved ~ O[2] ~ Concentration ~ (mu*mol ~ kg^-1))
+
+temp_axis = seq(from=0.00, to=25.00, by=0.01)
+
+ggplot() + 
+  geom_point(data=time_series_o2, mapping=aes(x=measured_temperature, y=measured_o2, color=time), shape=20, size=0.8) +
+  geom_point(data=time_series_o2, mapping=aes(x=measured_temperature, y=calculated_o2, color=time), shape=20, size=0.8) +
+  scale_x_continuous(
+    name=xlabel
+  ) +
+  scale_y_continuous(
+    name=ylabel
+  ) + 
+  ggtitle(
+    label = title
+  ) +
+  # theme_bw() + 
+  theme (
+    # axis.line.y.right = element_line(color='black'),
+    # # axis.title.y.right = element_text(color=sec_axis_color),
+    # # axis.ticks.y.right = element_line(color=sec_axis_color),
+    # # axis.text.y.right = element_text(color=sec_axis_color),
+    # axis.line.y.left = element_line(color='black'),
+    # axis.title.y.left = element_text(color='black'),
+    # axis.ticks.y.left = element_line(color='black'),
+    # axis.text.y.left = element_text(color='black'),
+    # axis.line.x.bottom = element_line(color='black'),
+    # axis.title.x.bottom = element_text(color='black'),
+    # axis.ticks.x.bottom = element_line(color='black'),
+    # axis.text.x.bottom = element_text(color='black'),
+    legend.text.align = 0,
+    # legend.position = c(0.85, 0.9),
+    plot.title = element_textbox_simple()
+  ) +
+  scale_color_viridis(
+    direction = -1,
+    name='Time (s)'
+  ) +
+  geom_label(
+    mapping=aes(
+      x=c(15, 7.5),
+      y=c(350, 175)
+    ),
+    label=c('Calculated', 'Measured'),
+    family='Cambria'
+  )
+```
+
+
+```{r}
+source('cal_utils.R')
+
+title = 'Suspended Sediment Concentration Calibration'
+xlabel = expression(Suspended ~ Sediment ~ Concentration ~ (mg ~ L^-1))
+ylabel = 'Backscatter (unitless)'
+
+
+ttf1 = reformat(read.csv(paste(FILE_PATH, TURBIDITY_SENSOR_DATA_1, sep=''), skip=1))
+ttf2 = reformat(read.csv(paste(FILE_PATH, TURBIDITY_SENSOR_DATA_2, sep=''), skip=1))
+
+ttf = rbind(ttf1, ttf2)
+
+elap1 = ttf1[,'dateTime'] - ttf1[1,'dateTime']
+elap2 = ttf2[,'dateTime'] - ttf2[1,'dateTime'] + elap1[length(elap1)] + 5
+
+elap = c(elap1, elap2)
+
+silt_additions = read.csv(paste(FILE_PATH, TURBIDITY_ADDITIONS, sep=''))[,1]
+timestamps_mat = read.csv(paste(FILE_PATH, TURBIDITY_ADDITIONS, sep=''))[,2:3]
+timestamps = rep(0, 2*length(silt_additions))
+c=1
+for (r in 1:(2*length(silt_additions))) {
+  timestamps[r] = timestamps_mat[(r + 1)/2,c]
+  if (c == 1) {
+    c = 2
+  } else {
+    c = 1
+  }
+}
+ts = rep(0, length(timestamps))
+
+for (s in 1:length(timestamps)) {
+  min = 60 * as.numeric(str_split_1(timestamps[s], ':')[1])
+  sec = as.numeric(str_split_1(timestamps[s], ':')[2])
+  ts[s] = min + sec
+}
+
+
+mean_measured_turbidities = rep(0, length(silt_additions))
+
+for (i in c(seq(from=1, to=2 * length(silt_additions) - 1, by = 2))) {
+  o = i + 1
+  mean_measured_turbidities[o/2] = (mean(ttf[elap >= ts[i] & elap <= ts[o], 'Proximity'] - ttf[elap >= ts[i] & elap <= ts[o], 'Ambient']))
+}
+
+
+slurry_concentration = slurry_sediment_mass / slurry_container_volume
+calculated_turbidities = rep(0,length(silt_additions))
+for (n in 1:length(silt_additions)) {
+  calculated_turbidities[n] = 1000 * sum(silt_additions[1:n]) / turbidity_test_volume
+}
+
+turb_data_plt = data.frame(calculated_turbidities, mean_measured_turbidities)
+
+ssc_calibration_curve = ggplot(data=turb_data_plt, mapping=aes(x=calculated_turbidities, y=mean_measured_turbidities)) +
+  geom_point(size=2.5) +
+  geom_smooth(method='lm', se=FALSE, color='black', linetype=2, linewidth=1) +
+  ggtitle(label=title) +
+  ylab(label=ylabel) +
+  xlab(label=xlabel) +
+  coord_fixed(ratio=0.01) +
+  scale_x_continuous(
+    breaks=seq(from=0, to=200, by=25)
+  ) +
+  scale_y_continuous(
+    breaks=seq(from=0, to=20000, by=2500),
+    limits=c(0, 10000)
+  ) +
+  geom_label(
+    mapping=aes(
+      x=10,
+      y=2500,
+      label=regression_label(mean_measured_turbidities, calculated_turbidities, 3)
+    ),
+    parse=TRUE,
+    family='Cambria',
+    size=8
+  )
+  # theme_bw() +
+  # theme(
+  #   text=element_text(family="serif"),
+  #   axis.line.y.right = element_line(color='black'),
+  #   axis.line.y.left = element_line(color='black'),
+  #   # axis.title.y.left = element_text(color='black'),
+  #   axis.ticks.y.left = element_line(color='black'),
+  #   # axis.text.y.left = element_text(color='black'),
+  #   axis.line.x.bottom = element_line(color='black'),
+  #   # axis.title.x.bottom = element_text(color='black'),
+  #   axis.ticks.x.bottom = element_line(color='black')
+    # axis.text.x.bottom = element_text(color='black')
+  # )
+
+
+
+tibttf = as_tibble(cbind(elap, ttf))
+tibttf |>
+  ggplot(mapping=aes(x=elap, y=Proximity)) +
+  geom_point() +
+  scale_x_continuous(limits=NULL) +
+  geom_vline(xintercept=ts)
+
+
+```
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
