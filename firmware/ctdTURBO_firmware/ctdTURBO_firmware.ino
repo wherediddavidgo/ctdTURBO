@@ -1,12 +1,12 @@
 //Date and time functions using a DS3231 RTC connected via I2C and Wire lib
-#include <Wire.h>
+// #include <Wire.h>
 #include <RTClib.h>
 // #include <DS3231.h>
 //#include <DateTime.h>
 #include <Adafruit_SleepyDog.h>
 
 //serial peripheral interface and library for SD card reader
-#include <SPI.h>  //serial peripheral interface for SD card reader
+// #include <SPI.h>  //serial peripheral interface for SD card reader
 #include <SD.h>   //library for SD card reader
 
 //communication protocols for temperature sensors
@@ -424,7 +424,6 @@ void SDCardDateTimeCallback(uint16_t* date, uint16_t* time)  // This funny funct
 //   uint8_t ctReg = rtc.read_register(DS3231_CONTROL_REG);
 //   ctReg |= 0b01000000;
 //   rtc.writeRegister(DS3231_CONTROL_REG, ctReg);
-//   Serial.println("poopy");
 // }
 
 
